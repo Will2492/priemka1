@@ -1,10 +1,10 @@
-from flask import Flask, request, render_template_string, redirect, url_for
+from flask import Flask, request, render_template_string
 import os
 
 app = Flask(__name__)
 
-# Путь для сохранения заявок
-SAVE_DIR = '/var/www/priemka/zayavki'
+# Путь для сохранения заявок рядом с app.py
+SAVE_DIR = os.path.join(os.path.dirname(__file__), 'zayavki')
 os.makedirs(SAVE_DIR, exist_ok=True)  # Создаем папку, если её нет
 
 form_html = """
@@ -52,9 +52,9 @@ def submit():
     name = request.form.get('name')
     message = request.form.get('message')
 
-    # Сохраняем заявку в отдельный файл
     try:
-        filename = os.path.join(SAVE_DIR, f"{name}_{len(os.listdir(SAVE_DIR)) + 1}.txt")
+        safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '_')).rstrip()
+        filename = os.path.join(SAVE_DIR, f"{safe_name}_{len(os.listdir(SAVE_DIR)) + 1}.txt")
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(f"Имя: {name}\nСообщение: {message}\n")
     except Exception as e:
@@ -62,9 +62,15 @@ def submit():
 
     return render_template_string(success_html, name=name, message=message)
 
+# Тестовый маршрут для проверки работоспособности сервера
+@app.route('/ping')
+def ping():
+    return 'Server is alive!'
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     try:
+        print(f"Сервер запускается на http://0.0.0.0:{port}")
         app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
     except Exception as e:
         print(f"Ошибка запуска сервера: {e}")
