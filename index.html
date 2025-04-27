@@ -1,62 +1,70 @@
+from flask import Flask, request, render_template_string, redirect, url_for
+import os
+
+app = Flask(__name__)
+
+# Путь для сохранения заявок
+SAVE_DIR = '/var/www/priemka/zayavki'
+os.makedirs(SAVE_DIR, exist_ok=True)  # Создаем папку, если её нет
+
+form_html = """
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Прием телефонов в ремонт</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Заявка</title>
 </head>
 <body>
-    <div class="container">
-        <h1>Прием устройства в ремонт</h1>
-        <form id="orderForm">
-            <label for="name">ФИО клиента:</label>
-            <input type="text" id="name" name="name" required>
-
-            <label for="phone">Телефон клиента:</label>
-            <input type="tel" id="phone" name="phone" required>
-
-            <label for="brand">Марка телефона:</label>
-            <input type="text" id="brand" name="brand" required>
-
-            <label for="model">Модель телефона:</label>
-            <input type="text" id="model" name="model" required>
-
-            <label for="problem">Описание неисправности:</label>
-            <textarea id="problem" name="problem" required></textarea>
-
-            <label for="price">Оценочная стоимость ремонта:</label>
-            <input type="number" id="price" name="price">
-
-            <button type="submit">Принять в ремонт</button>
-        </form>
-<button class="print-button" onclick="window.print()">🖨️ Распечатать</button>
-
-<style>
-.print-button {
-  background-color: #4CAF50; /* Зеленый цвет */
-  color: white;
-  padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 18px;
-  transition: background-color 0.3s ease, transform 0.2s ease;
-}
-
-.print-button:hover {
-  background-color: #45a049;
-  transform: scale(1.05);
-}
-
-.print-button:active {
-  transform: scale(0.95);
-}
-</style>
-        <div id="ordersList">
-            <h2>Список заявок:</h2>
-            <ul id="orders"></ul>
-        </div>
-    </div>
-
-    <script src="script.js"></script>
+    <h1>Отправить заявку</h1>
+    <form method="POST" action="/submit">
+        <label for="name">Имя:</label>
+        <input type="text" id="name" name="name" required><br><br>
+        <label for="message">Сообщение:</label>
+        <textarea id="message" name="message" required></textarea><br><br>
+        <button type="submit">Отправить</button>
+    </form>
 </body>
 </html>
+"""
+
+success_html = """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Успех</title>
+</head>
+<body>
+    <h1>Спасибо, {{ name }}!</h1>
+    <p>Ваша заявка принята:</p>
+    <p>{{ message }}</p>
+    <a href="/">Отправить новую заявку</a>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    return render_template_string(form_html)
+
+@app.route('/submit', methods=['POST'])
+def submit():
+    name = request.form.get('name')
+    message = request.form.get('message')
+
+    # Сохраняем заявку в отдельный файл
+    try:
+        filename = os.path.join(SAVE_DIR, f"{name}_{len(os.listdir(SAVE_DIR)) + 1}.txt")
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(f"Имя: {name}\nСообщение: {message}\n")
+    except Exception as e:
+        return f"Ошибка при сохранении заявки: {e}"
+
+    return render_template_string(success_html, name=name, message=message)
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    try:
+        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
+    except Exception as e:
+        print(f"Ошибка запуска сервера: {e}")
