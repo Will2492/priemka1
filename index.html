@@ -1,76 +1,104 @@
-from flask import Flask, request, render_template_string
-import os
+# Обновляем систему и устанавливаем необходимые пакеты
+sudo apt update
+sudo apt install -y python3-pip python3-venv nginx
+
+# Создаем директорию проекта
+sudo mkdir -p /var/www/priemka
+sudo chown $USER:$USER /var/www/priemka
+cd /var/www/priemka
+
+# Настраиваем виртуальное окружение для Python
+python3 -m venv venv
+source venv/bin/activate
+
+# Устанавливаем Flask и Gunicorn внутри виртуального окружения
+pip install flask gunicorn
+
+# Создаем приложение Flask
+cat > app.py <<EOF
+from flask import Flask, request
+import os, time
 
 app = Flask(__name__)
 
-# Путь для сохранения заявок рядом с app.py
-SAVE_DIR = os.path.join(os.path.dirname(__file__), 'zayavki')
-os.makedirs(SAVE_DIR, exist_ok=True)  # Создаем папку, если её нет
-
-form_html = """
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <title>Заявка</title>
-</head>
-<body>
-    <h1>Отправить заявку</h1>
-    <form method="POST" action="/submit">
-        <label for="name">Имя:</label>
-        <input type="text" id="name" name="name" required><br><br>
-        <label for="message">Сообщение:</label>
-        <textarea id="message" name="message" required></textarea><br><br>
-        <button type="submit">Отправить</button>
-    </form>
-</body>
-</html>
-"""
-
-success_html = """
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <title>Успех</title>
-</head>
-<body>
-    <h1>Спасибо, {{ name }}!</h1>
-    <p>Ваша заявка принята:</p>
-    <p>{{ message }}</p>
-    <a href="/">Отправить новую заявку</a>
-</body>
-</html>
-"""
-
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template_string(form_html)
-
-@app.route('/submit', methods=['POST'])
-def submit():
-    name = request.form.get('name')
-    message = request.form.get('message')
-
-    try:
-        safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '_')).rstrip()
-        filename = os.path.join(SAVE_DIR, f"{safe_name}_{len(os.listdir(SAVE_DIR)) + 1}.txt")
+    if request.method == 'POST':
+        data = request.form.get('request')
+        if not os.path.exists('заявки'):
+            os.makedirs('заявки')
+        filename = f'заявки/{int(time.time())}.txt'
         with open(filename, 'w', encoding='utf-8') as f:
-            f.write(f"Имя: {name}\nСообщение: {message}\n")
-    except Exception as e:
-        return f"Ошибка при сохранении заявки: {e}"
+            f.write(data)
+        return '✅ Заявка сохранена!'
+    return '''
+        <form method="POST">
+            <textarea name="request" rows="5" cols="30"></textarea><br>
+            <button type="submit">Отправить заявку</button>
+        </form>
+    '''
 
-    return render_template_string(success_html, name=name, message=message)
+if __name__ == "__main__":
+    app.run(host='0.0.0.0')
+EOF
 
-# Тестовый маршрут для проверки работоспособности сервера
-@app.route('/ping')
-def ping():
-    return 'Server is alive!'
+# Проверяем, что приложение запускается
+python3 app.py
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    try:
-        print(f"Сервер запускается на http://0.0.0.0:{port}")
-        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
-    except Exception as e:
-        print(f"Ошибка запуска сервера: {e}")
+# Останавливаем приложение (если оно запущено)
+pkill -f gunicorn || true
+
+# Настраиваем Gunicorn
+deactivate
+cat > gunicorn_start.sh <<EOF
+#!/bin/bash
+source /var/www/priemka/venv/bin/activate
+exec gunicorn -w 4 -b 127.0.0.1:8000 app:app
+EOF
+chmod +x gunicorn_start.sh
+
+# Настраиваем systemd для управления Gunicorn
+sudo tee /etc/systemd/system/priemka.service <<EOF
+[Unit]
+Description=Gunicorn instance to serve priemka
+After=network.target
+
+[Service]
+User=$USER
+Group=$USER
+WorkingDirectory=/var/www/priemka
+ExecStart=/var/www/priemka/gunicorn_start.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Перезапускаем systemd и запускаем Gunicorn
+sudo systemctl daemon-reload
+sudo systemctl enable priemka
+sudo systemctl start priemka
+
+# Настраиваем Nginx
+sudo tee /etc/nginx/sites-available/priemka <<EOF
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+EOF
+
+# Активируем конфигурацию Nginx
+sudo ln -s /etc/nginx/sites-available/priemka /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+
+# Перезапускаем Nginx
+sudo systemctl restart nginx
+
+# Выводим сообщение об успешной настройке
+echo "✅ Сервер запущен на http://ваш-ip/"
