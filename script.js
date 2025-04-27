@@ -1,5 +1,6 @@
 document.getElementById('orderForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    
     const order = {
         name: document.getElementById('name').value,
         phone: document.getElementById('phone').value,
@@ -16,6 +17,7 @@ document.getElementById('orderForm').addEventListener('submit', function(e) {
 
     this.reset();
     renderOrders();
+    showThankYouMessage();
 });
 
 function renderOrders() {
@@ -30,6 +32,21 @@ function renderOrders() {
         `;
         ordersList.appendChild(li);
     });
+}
+
+function showThankYouMessage() {
+    const container = document.querySelector('.container');
+    const message = document.createElement('div');
+    message.className = 'thank-you';
+    message.innerHTML = `
+        <h2>Спасибо!</h2>
+        <p>Ваша заявка успешно принята.</p>
+    `;
+    container.prepend(message);
+
+    setTimeout(() => {
+        message.remove();
+    }, 4000); // сообщение исчезнет через 4 секунды
 }
 
 document.addEventListener('DOMContentLoaded', renderOrders);
