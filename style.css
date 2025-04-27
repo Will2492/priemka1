@@ -37,3 +37,16 @@ button:hover {
 #ordersList {
     margin-top: 30px;
 }
+.thank-you {
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    text-align: center;
+    animation: fadeIn 0.5s ease;
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
