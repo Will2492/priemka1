@@ -1,1 +1,0 @@
-# priemka1
